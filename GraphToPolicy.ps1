@@ -1,3 +1,4 @@
+#requires -version 7
 <#
 .SYNOPSIS
 Converts an Azure Resource Graph query into a policy rule.
@@ -21,9 +22,9 @@ Param(
 	[Parameter(Mandatory=$False)]
 	[string]$Effect = "audit",
 	[Parameter(Mandatory=$False)]
-	[string]$CreatePolicy = "",
+    [string]$CreatePolicy = "",
 	[Parameter(Mandatory=$False)]
-	[string]$ManagementGroupName = ""
+    [string]$ManagementGroupName = ""
 )
 
 function CreateNewPolicy
@@ -32,7 +33,7 @@ function CreateNewPolicy
         [string]
         $ManagementGroupName
     )
-	echo "Creating policy '$CreatePolicy' ..."
+	Write-Output "Creating policy '$CreatePolicy' ..."
     $resp = $resp -join ""
     $policyRule = $resp[17..($resp.Length-2)]
     $policyRule = $policyRule -join ""
@@ -47,7 +48,7 @@ function CreateNewPolicy
 }
 
 function CallAzureResourceGraph
-{	
+{
     & $ArmClientPath token *>$null
 	if (-not ($?))
 	{
@@ -57,15 +58,18 @@ function CallAzureResourceGraph
     if($response[0] -eq "{") {
         return $response
     }
-	return $response[1..$response.Length]
+    return $response[1..($response.Length-2)] -join ''
+        | ForEach-Object { [regex]::Unescape($_) }
+        | ConvertFrom-Json -AsHashtable
+        | ConvertTo-Json -AsArray -Depth 100
 }
 
 function DownloadArmClient
-{    
-    if([environment]::OSVersion.Platform -eq "Win32NT"){     
-        $global:ArmClientPath = ".\armclient.exe"        
-        $check = Test-Path($global:ArmClientPath)           
-        if( $check-eq $false){            
+{
+    if([environment]::OSVersion.Platform -eq "Win32NT"){
+        $global:ArmClientPath = ".\armclient.exe"
+        $check = Test-Path($global:ArmClientPath)
+        if( $check-eq $false){
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest "http://github.com/projectkudu/ARMClient/releases/download/v1.3/ARMClient.zip" -OutFile ArmClient.zip
             Expand-Archive .\ArmClient.zip -DestinationPath .
@@ -78,10 +82,10 @@ function DownloadArmClient
         if( $check-eq $false){
             # file with path $path doesn't exist
             # let's download and run it
-            echo 'curl -sL https://github.com/yangl900/armclient-go/releases/download/v0.2.3/armclient-go_linux_64-bit.tar.gz | tar -xz' > $path
+            Write-Output 'curl -sL https://github.com/yangl900/armclient-go/releases/download/v0.2.3/armclient-go_linux_64-bit.tar.gz | tar -xz' > $path
             bash $path
-        }        
-    }    
+        }
+    }
     # Find a way to avoid this warning
     if(-not (Test-Path $ArmClientPath)){
         Write-Error "Unable to find ArmClient, the script would not work"
@@ -96,5 +100,5 @@ $resp = CallAzureResourceGraph
 if($CreatePolicy -ne ""){
     CreateNewPolicy -ManagementGroupName $ManagementGroupName
 } else {
-    echo $resp
+    Write-Output $resp
 }
